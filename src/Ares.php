@@ -224,7 +224,7 @@ class Ares
                 $data = $aresResponse->children($ns['are']);
                 $elements = $data->children($ns['D'])->Vypis_RES;
 
-                if (strval($elements->ZAU->ICO) === $id) {
+                if (isset($elements->ZAU->ICO) and Lib::toInteger(strval($elements->ZAU->ICO)) === $id) {
                     $record = new AresRecord();
                     $record->setCompanyId(strval($id));
                     $record->setTaxId($this->findVatById($id));
@@ -233,7 +233,9 @@ class Ares
                     $record->setStreetHouseNumber(strval($elements->SI->CD));
                     $record->setStreetOrientationNumber(strval($elements->SI->CO));
                     $record->setTown(strval($elements->SI->N));
-                    $record->setZip(strval($elements->SI->PSC));
+					$record->setZip(strval($elements->SI->PSC));
+
+					$record->setCategoryNrOfEmloyees(strval($elements->SU->KPP));
                 } else {
                     throw new AresException('IČ firmy nebylo nalezeno.');
                 }
@@ -281,13 +283,12 @@ class Ares
             $vatResponse = simplexml_load_string($vatRequest);
 
             if ($vatResponse) {
-                $record = new TaxRecord();
                 $ns = $vatResponse->getDocNamespaces();
                 $data = $vatResponse->children($ns['are']);
                 $elements = $data->children($ns['dtt'])->V->S;
 
-                if (strval($elements->ico) === $id) {
-                    $record->setTaxId(str_replace('dic=', 'CZ', strval($elements->p_dph)));
+                if (Lib::toInteger(strval($elements->ico)) === $id) {
+					$record = new TaxRecord(str_replace('dic=', 'CZ', strval($elements->p_dph)));
                 } else {
                     throw new AresException('DIČ firmy nebylo nalezeno.');
                 }
