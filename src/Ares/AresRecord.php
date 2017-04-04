@@ -55,6 +55,11 @@ class AresRecord
     private $zip;
 
     /**
+	 * @var string
+	 */
+    private $categoryNrOfEmloyees;
+
+    /**
      * @var null|GouteClient
      */
     protected $client;
@@ -270,5 +275,22 @@ class AresRecord
     {
         $this->zip = $zip;
     }
+
+	/**
+	 * @return string
+	 */
+	public function getCategoryNrOfEmloyees()
+	{
+		return $this->categoryNrOfEmloyees;
+	}
+
+	/**
+	 * @param string $categoryNrOfEmloyees
+	 */
+	public function setCategoryNrOfEmloyees($categoryNrOfEmloyees)
+	{
+		$this->categoryNrOfEmloyees = $categoryNrOfEmloyees;
+	}
+
 
 }

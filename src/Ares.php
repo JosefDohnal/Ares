@@ -5,6 +5,8 @@ namespace Defr;
 use Defr\Ares\AresException;
 use Defr\Ares\AresRecord;
 use Defr\Ares\AresRecords;
+use Defr\Ares\DistrictRecord;
+use Defr\Ares\MunicipalityRecord;
 use Defr\Ares\TaxRecord;
 use InvalidArgumentException;
 
@@ -19,6 +21,7 @@ class Ares
     const URL_RES = 'http://wwwinfo.mfcr.cz/cgi-bin/ares/darv_res.cgi?ICO=%s';
     const URL_TAX = 'http://wwwinfo.mfcr.cz/cgi-bin/ares/ares_es.cgi?ico=%s&filtr=0';
     const URL_FIND = 'http://wwwinfo.mfcr.cz/cgi-bin/ares/ares_es.cgi?obch_jm=%s&obec=%s&filtr=0';
+    const URL_MINICIPALITIES = 'http://wwwinfo.mfcr.cz/ares/obce/obce_okr_%s.html.cz';
 
     /**
      * @var string
@@ -224,7 +227,7 @@ class Ares
                 $data = $aresResponse->children($ns['are']);
                 $elements = $data->children($ns['D'])->Vypis_RES;
 
-                if (strval($elements->ZAU->ICO) === $id) {
+                if (isset($elements->ZAU->ICO) and Lib::toInteger(strval($elements->ZAU->ICO)) === $id) {
                     $record = new AresRecord();
                     $record->setCompanyId(strval($id));
                     $record->setTaxId($this->findVatById($id));
@@ -233,7 +236,9 @@ class Ares
                     $record->setStreetHouseNumber(strval($elements->SI->CD));
                     $record->setStreetOrientationNumber(strval($elements->SI->CO));
                     $record->setTown(strval($elements->SI->N));
-                    $record->setZip(strval($elements->SI->PSC));
+					$record->setZip(strval($elements->SI->PSC));
+
+					$record->setCategoryNrOfEmloyees(strval($elements->SU->KPP));
                 } else {
                     throw new AresException('IČ firmy nebylo nalezeno.');
                 }
@@ -281,13 +286,12 @@ class Ares
             $vatResponse = simplexml_load_string($vatRequest);
 
             if ($vatResponse) {
-                $record = new TaxRecord();
                 $ns = $vatResponse->getDocNamespaces();
                 $data = $vatResponse->children($ns['are']);
                 $elements = $data->children($ns['dtt'])->V->S;
 
-                if (strval($elements->ico) === $id) {
-                    $record->setTaxId(str_replace('dic=', 'CZ', strval($elements->p_dph)));
+                if (Lib::toInteger(strval($elements->ico)) === $id) {
+					$record = new TaxRecord(str_replace('dic=', 'CZ', strval($elements->p_dph)));
                 } else {
                     throw new AresException('DIČ firmy nebylo nalezeno.');
                 }
@@ -363,6 +367,58 @@ class Ares
 
         return $records;
     }
+
+	/**
+	 * @param DistrictRecord $district
+	 *
+	 * @return MunicipalityRecord[]
+	 * @throws AresException
+	 */
+    public function getMunicipalities(DistrictRecord $district)
+	{
+		$cachedFileName = $district->getAbbreviation().'_'.date($this->cacheStrategy).'.php';
+		$cachedFile = $this->cacheDir.'/mun_'.$cachedFileName;
+		$cachedRawFile = $this->cacheDir.'/mun_raw_'.$cachedFileName;
+
+		if (is_file($cachedFile)) {
+			return unserialize(file_get_contents($cachedFile));
+		}
+
+		// Sestaveni URL
+		$url = $this->wrapUrl(sprintf(self::URL_MINICIPALITIES, $district->getAbbreviation()));
+
+		try {
+			if ($this->debug) {
+				$aresRequest = file_get_contents($url, null, stream_context_create($this->contextOptions));
+				file_put_contents($cachedRawFile, $aresRequest);
+			}
+			//libxml_use_internal_errors(true);
+			$html = new \DOMDocument();
+			$html->loadHtmlFile($url);
+			$aresResponse = simplexml_import_dom($html);
+
+			$municipalities = [];
+
+			if ($aresResponse) {
+				foreach ($aresResponse->xpath("//tr[@class]") as $tr) {
+					$municipalityRecord = new MunicipalityRecord();
+					$municipalityRecord->setId((string)$tr->td[0]);
+					$municipalityRecord->setName((string)$tr->td[1]->span[0]);
+					$municipalityRecord->setZip((string)$tr->td[2]);
+					$municipalities[] = $municipalityRecord;
+				}
+
+			} else {
+				throw new AresException('Databáze ARES není dostupná.');
+			}
+		} catch (\Exception $e) {
+			throw new AresException($e->getMessage());
+		}
+
+		file_put_contents($cachedFile, serialize($municipalities));
+
+		return $municipalities;
+	}
 
     /**
      * @param string $cacheStrategy
